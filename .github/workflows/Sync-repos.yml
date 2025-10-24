@@ -257,4 +257,5 @@ jobs:
             MSG="$MSG (路径: ${{ github.event.inputs.source_path }})"
           fi
           git commit -m "$MSG"
-          git push origin HEAD
+          TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
+          git push --force "origin" "$TARGET_BRANCH"
