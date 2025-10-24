@@ -49,38 +49,34 @@ jobs:
   sync-to-current-repo:
     runs-on: ubuntu-latest
     
-    steps:
-    - name: 检出默认分支（用于获取基础历史）
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
+      - name: 初始化本地Git仓库
+        run: |
+          git init
+          git remote add origin "https://github.com/${{ github.repository }}.git"
 
-    - name: 创建或切换到目标分支
-      run: |
-        TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
-        echo "目标分支: $TARGET_BRANCH"
+      - name: 创建或切换到目标分支
+        run: |
+          TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
+          echo "目标分支: $TARGET_BRANCH"
+          if git ls-remote --exit-code --heads origin "$TARGET_BRANCH"; then
+            echo "✅ 远程分支 '$TARGET_BRANCH' 已存在，正在检出..."
+            git fetch origin "$TARGET_BRANCH"
+            git checkout "$TARGET_BRANCH"
+          else
+            echo "🆕 远程分支 '$TARGET_BRANCH' 不存在，正在创建干净分支..."
+            git checkout --orphan "$TARGET_BRANCH"
+          fi
+          CURRENT=$(git branch --show-current)
+          echo "当前分支: $CURRENT"
+          if [ "$CURRENT" != "$TARGET_BRANCH" ]; then
+            echo "❌ 分支切换失败，强制重试..."
+            git checkout --orphan "$TARGET_BRANCH"
+          fi
 
-        if git ls-remote --exit-code --heads origin "$TARGET_BRANCH"; then
-          echo "✅ 远程分支 '$TARGET_BRANCH' 已存在，正在检出..."
-          git fetch origin "$TARGET_BRANCH:$TARGET_BRANCH"
-          git checkout "$TARGET_BRANCH"
-        else
-          echo "🆕 远程分支 '$TARGET_BRANCH' 不存在，正在基于默认分支创建..."
-          git checkout -b "$TARGET_BRANCH"
-        fi
-
-        CURRENT=$(git branch --show-current)
-        echo "当前分支: $CURRENT"
-        if [ "$CURRENT" != "$TARGET_BRANCH" ]; then
-          echo "❌ 分支切换失败，强制重试..."
-          git checkout -B "$TARGET_BRANCH"
-        fi
-
-    - name: 设置Git配置
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: 设置Git配置
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
     - name: 同步并保存仓库
       env:
