@@ -48,8 +48,7 @@ on:
 jobs:
   sync-to-current-repo:
     runs-on: ubuntu-latest
-    steps: 
-    
+    steps:     
       - name: 初始化本地Git仓库
         run: |
           git init
