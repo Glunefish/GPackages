@@ -1,5 +1,4 @@
-# The Workflow By GruntFish & DS.
-
+# The Workflow By GruntFish & DS & QWen Max.
 name: Sync-repos
 
 on:
@@ -46,19 +45,38 @@ on:
         type: boolean
         default: true
 
-
 jobs:
   sync-to-current-repo:
     runs-on: ubuntu-latest
     
     steps:
-    - name: 检出默认分支
+    - name: 检出默认分支（用于获取基础历史）
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        ref: ${{ github.event.inputs.target_branch }}
         fetch-depth: 0
-        
+
+    - name: 创建或切换到目标分支
+      run: |
+        TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
+        echo "目标分支: $TARGET_BRANCH"
+
+        if git ls-remote --exit-code --heads origin "$TARGET_BRANCH"; then
+          echo "✅ 远程分支 '$TARGET_BRANCH' 已存在，正在检出..."
+          git fetch origin "$TARGET_BRANCH:$TARGET_BRANCH"
+          git checkout "$TARGET_BRANCH"
+        else
+          echo "🆕 远程分支 '$TARGET_BRANCH' 不存在，正在基于默认分支创建..."
+          git checkout -b "$TARGET_BRANCH"
+        fi
+
+        CURRENT=$(git branch --show-current)
+        echo "当前分支: $CURRENT"
+        if [ "$CURRENT" != "$TARGET_BRANCH" ]; then
+          echo "❌ 分支切换失败，强制重试..."
+          git checkout -B "$TARGET_BRANCH"
+        fi
+
     - name: 设置Git配置
       run: |
         git config --global user.name "github-actions[bot]"
@@ -208,43 +226,33 @@ jobs:
     - name: 清理默认文件
       if: ${{ github.event.inputs.clean_default_files == 'true' }}
       run: |
-        CURRENT_BRANCH="${{ github.event.inputs.target_branch }}"
+        TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
         DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
         
-        if [ "$CURRENT_BRANCH" = "$DEFAULT_BRANCH" ]; then
-          echo "警告：当前在默认分支 $DEFAULT_BRANCH，跳过清理以避免误删工作流文件！"
+        if [ "$TARGET_BRANCH" = "$DEFAULT_BRANCH" ]; then
+          echo "⚠️ 警告：当前在默认分支 $DEFAULT_BRANCH，跳过清理以避免误删工作流文件！"
           exit 0
         fi
         
-        echo "警告：正在清理所有默认文件，包括工作流！"
+        echo "🧹 正在清理默认文件（README.md, .gitignore, LICENSE, workflows 等）..."
         
         if [ -d ".github/workflows" ]; then
           rm -rf .github/workflows
-          echo "已删除工作流文件"
+          echo "✅ 已删除工作流文件"
         fi
         
-        [ -f "README.md" ] && rm -f README.md && echo "已删除README.md"
-        [ -f ".gitignore" ] && rm -f .gitignore && echo "已删除.gitignore"
-        [ -f "LICENSE" ] && rm -f LICENSE && echo "已删除LICENSE"
+        [ -f "README.md" ] && rm -f README.md && echo "✅ 已删除 README.md"
+        [ -f ".gitignore" ] && rm -f .gitignore && echo "✅ 已删除 .gitignore"
+        [ -f "LICENSE" ] && rm -f LICENSE && echo "✅ 已删除 LICENSE"
         
         if [ -d ".github" ] && [ -z "$(ls -A .github)" ]; then
           rm -rf .github
-          echo "已删除空.github目录"
+          echo "✅ 已删除空 .github 目录"
         fi
         
-        echo "清理完成！注意：此操作会删除工作流，下次需要重新上传工作流文件才能使用"
-        
-        # 验证分支切换
-        CURRENT_BRANCH=$(git branch --show-current)
-        echo "当前分支: $CURRENT_BRANCH"
-        
-        if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
-          echo "❌ 分支切换失败！强制修复..."
-          git checkout -B "$TARGET_BRANCH"
-          echo "修复后分支: $(git branch --show-current)"
-        fi
+        echo "✅ 清理完成！"
 
-    - name: 提交更改
+    - name: 提交并推送更改
       run: |
         git add .
         git commit -m "添加仓库: ${{ github.event.inputs.source_repo }}${{ github.event.inputs.source_path && format(' (路径: {0})', github.event.inputs.source_path) || '' }}"
